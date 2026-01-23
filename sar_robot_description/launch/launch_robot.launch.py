@@ -11,6 +11,9 @@ def generate_launch_description():
     # Get the package directory
     pkg_path = get_package_share_directory('sar_robot_description')
     
+    # World file path
+    world_file = os.path.join(pkg_path, 'worlds', 'collapsed_building.sdf')
+    
     # Process Xacro file
     xacro_file = os.path.join(pkg_path, 'urdf', 'sar_robot.urdf.xacro')
     robot_description_config = xacro.process_file(xacro_file)
@@ -26,7 +29,7 @@ def generate_launch_description():
         ]
     )
 
-    # Gazebo Sim (Using empty.sdf for maximum stability)
+    # Gazebo Sim (Using collapsed building world)
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -35,7 +38,7 @@ def generate_launch_description():
                 'gz_sim.launch.py'
             )
         ),
-        launch_arguments={'gz_args': '-r empty.sdf'}.items(),
+        launch_arguments={'gz_args': world_file}.items(),
     )
 
     # Entity Creation Node
