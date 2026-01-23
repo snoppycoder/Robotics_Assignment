@@ -1,22 +1,21 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 import xacro
 
-
 def generate_launch_description():
 
-    # -------------------------------
-    # Robot Description (URDF/Xacro)
-    # -------------------------------
+    # Get the package directory
     pkg_path = get_package_share_directory('sar_robot_description')
+    
+    # Process Xacro file
     xacro_file = os.path.join(pkg_path, 'urdf', 'sar_robot.urdf.xacro')
-
     robot_description_config = xacro.process_file(xacro_file)
 
+    # Robot State Publisher Node
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -27,9 +26,7 @@ def generate_launch_description():
         ]
     )
 
-    # -------------------------------
-    # Ignition Gazebo
-    # -------------------------------
+    # Gazebo Sim (Using empty.sdf for maximum stability)
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -41,9 +38,7 @@ def generate_launch_description():
         launch_arguments={'gz_args': '-r empty.sdf'}.items(),
     )
 
-    # -------------------------------
-    # Spawn Robot (IMPORTANT FIX)
-    # -------------------------------
+    # Entity Creation Node
     spawn_robot = Node(
         package='ros_gz_sim',
         executable='create',
@@ -51,32 +46,36 @@ def generate_launch_description():
         arguments=[
             '-topic', 'robot_description',
             '-name', 'sar_robot',
-            '-z', '0.3'   # <<< prevents ground collision on spawn
+            '-z', '0.3'
         ],
     )
 
-    # -------------------------------
-    # ROS ↔ Gazebo Bridge
-    # -------------------------------
-    bridge = Node(
+    bridge_node = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         output='screen',
         arguments=[
-            # ROS -> Gazebo (teleop)
-            '/cmd_vel@geometry_msgs/msg/Twist@ignition.msgs.Twist',
-
-            # Gazebo -> ROS (odometry)
-            '/odom@nav_msgs/msg/Odometry@ignition.msgs.Odometry',
-
-            # Clock
-            '/clock@rosgraph_msgs/msg/Clock@ignition.msgs.Clock'
+            '/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist',
+            '/odom@nav_msgs/msg/Odometry@gz.msgs.Odometry',
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock]',
+            '/scan@sensor_msgs/msg/LaserScan@gz.msgs.LaserScan',
+            '/model/sar_robot/scan@sensor_msgs/msg/LaserScan@gz.msgs.LaserScan',
+            '/scan@sensor_msgs/msg/LaserScan@gz.msgs.GpuLaserScan',
+            '/model/sar_robot/scan@sensor_msgs/msg/LaserScan@gz.msgs.GpuLaserScan',
+            '/scan/points@sensor_msgs/msg/PointCloud2@gz.msgs.PointCloudPacked'
         ],
+        remappings=[
+            ('/model/sar_robot/scan', '/scan'),
+        ],
+        parameters=[{'use_sim_time': True}]
     )
 
-    # -------------------------------
-    # Launch Everything
-    # -------------------------------
+    # Delay bridge start to allow Gazebo to create topics/entities
+    bridge = TimerAction(
+        period=3.0,
+        actions=[bridge_node]
+    )
+
     return LaunchDescription([
         robot_state_publisher,
         gazebo,
