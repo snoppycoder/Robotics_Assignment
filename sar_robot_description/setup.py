@@ -29,6 +29,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'victim_detector = sar_robot_description.victim_detector:main',
         ],
     },
 )
